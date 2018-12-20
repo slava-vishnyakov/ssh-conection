@@ -24,4 +24,5 @@ print($ssh->sudoRunRaw('whoami'));
 
 ```bash
 vagrant up
-phpunit```
+phpunit
+```

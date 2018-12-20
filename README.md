@@ -1,6 +1,10 @@
+# Install
+
 ```bash
 composer require slava-vishnyakov/ssh-connection
 ```
+
+# Use
 
 ```php
 use SlavaVishnyakov\SshConnection\SshConnection;
@@ -15,3 +19,9 @@ print($ssh->runRaw('ls'));
 $ssh->sudoPassword = 'vagrant';
 print($ssh->sudoRunRaw('whoami'));
 ```
+
+# Testing
+
+```bash
+vagrant up
+phpunit```

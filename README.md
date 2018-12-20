@@ -1,6 +1,10 @@
-TODO:
+```bash
+composer require slava-vishnyakov/ssh-connection
+```
 
 ```php
+use SlavaVishnyakov\SshConnection\SshConnection;
+
 $ssh = new SshConnection($username, '127.0.0.1:2222');
 $ssh->privateKeyPath = 'my_private_key';
 // $ssh->privateKeyPassword = '';

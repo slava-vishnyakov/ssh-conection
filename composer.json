@@ -1,7 +1,7 @@
 {
   "name": "slava-vishnyakov/ssh-connection",
   "type": "library",
-  "description": "PHP Secure Communications Library - Pure-PHP implementations of RSA, AES, SSH2, SFTP, X.509 etc.",
+  "description": "PHP SSH Connection",
   "keywords": [],
   "license": "MIT",
   "authors": [

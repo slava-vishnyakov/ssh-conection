@@ -70,13 +70,11 @@ class SshConnection
 
     }
 
-    public function run($cmd, $args = []): CommandResult
+    public function run($cmd): CommandResult
     {
-        $cmd2 = escapeshellcmd($cmd) . " " . join(' ', array_map('escapeshellarg', $args));
-
         $stderr = $this->getHome() . '/.stderr_' . md5(random_bytes(32));
 
-        $stdout = $this->runRaw("$cmd2 2>$stderr; echo $?");
+        $stdout = $this->runRaw("$cmd 2>$stderr; echo $?");
 
         $exitCodeRegex = '#\r?\n?(\d+)$#';
         preg_match($exitCodeRegex, $stdout, $m);
@@ -89,13 +87,11 @@ class SshConnection
         return new CommandResult($stdout, $stderr, $exitCode);
     }
 
-    public function sudoRun($cmd, $args = []): CommandResult
+    public function sudoRun($cmd): CommandResult
     {
-        $cmd2 = escapeshellcmd($cmd) . " " . join(' ', array_map('escapeshellarg', $args));
-
         $stderr = $this->getHome() . '/.stderr_' . md5(random_bytes(32));
 
-        $stdout = $this->runSudoRaw("$cmd2 2>$stderr; echo \$?");
+        $stdout = $this->runSudoRaw("$cmd 2>$stderr; echo \$?");
 
         $exitCodeRegex = '#\r?\n?(\d+)$#';
         preg_match($exitCodeRegex, $stdout, $m);

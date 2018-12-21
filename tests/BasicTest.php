@@ -16,36 +16,46 @@ class BasicTest extends TestCase
     /** @test */
     public function basic_connect()
     {
-        $s = $this->connectToVagrant();
-        $s->sshWrite("whoami\n");
-        $this->assertEquals("vagrant", $s->readUntilPrompt());
+        $ssh = $this->connectToVagrant();
+        $ssh->sshWrite("whoami\n");
+        $this->assertEquals("vagrant", $ssh->readUntilPrompt());
     }
 
     /** @test */
     public function basic_sudo()
     {
-        $s = $this->connectToVagrant();
-        $result = $s->runSudoRaw("whoami");
+        $ssh = $this->connectToVagrant();
+        $result = $ssh->runSudoRaw("whoami");
         $this->assertEquals("root", $result);
+    }
+
+    /** @test */
+    public function basic_sudo_removes_password_file()
+    {
+        $ssh = $this->connectToVagrant();
+        $result0 = $ssh->runRaw('ls -1a ~');
+        $ssh->runSudoRaw("whoami");
+        $result1 = $ssh->runRaw('ls -1a ~');
+        $this->assertEquals($result0, $result1, "Failed to clean up home");
     }
 
     /** @test */
     public function sudo_quoting()
     {
-        $s = $this->connectToVagrant();
-        $result = $s->runSudoRaw("echo \"1\"");
+        $ssh = $this->connectToVagrant();
+        $result = $ssh->runSudoRaw("echo \"1\"");
         $this->assertEquals("1", $result);
     }
 
     /** @test */
     public function sudo_with_real_password()
     {
-        $s = $this->connectToVagrant();
+        $ssh = $this->connectToVagrant();
 
         // password: vagrant
         $hash = '$6$0GkaeSeC$D4KDx.aT1uwSMjJwlGwU/uHJqs6jkHPZ884L6LEo3.yK5WNeskNOeRQ37f6uateDYzsg6yqaxKIW5K.FW04R71';
 
-        $s->runSudoRaw("(
+        $ssh->runSudoRaw("(
             deluser sudo_with_pass --remove-home;
             useradd sudo_with_pass --create-home --password '{$hash}' --shell '/bin/bash';
             cp -R /home/vagrant/.ssh /home/sudo_with_pass/;
@@ -54,11 +64,11 @@ class BasicTest extends TestCase
         ) 2> /dev/null");
         // ignore if already exists
 
-        $c = $this->connectToVagrant(false, 'sudo_with_pass');
-        $c->sudoPassword = 'vagrant';
+        $ssh = $this->connectToVagrant(false, 'sudo_with_pass');
+        $ssh->sudoPassword = 'vagrant';
 
         $cmd = 'whoami';
-        $result = $c->runSudoRaw($cmd);
+        $result = $ssh->runSudoRaw($cmd);
 
         $this->assertEquals('root', $result);
 
@@ -67,12 +77,12 @@ class BasicTest extends TestCase
     /** @test */
     public function unhappy_sudo()
     {
-        $s = $this->connectToVagrant(false);
+        $ssh = $this->connectToVagrant(false);
 
         // password: vagrant
         $hash = '$6$0GkaeSeC$D4KDx.aT1uwSMjJwlGwU/uHJqs6jkHPZ884L6LEo3.yK5WNeskNOeRQ37f6uateDYzsg6yqaxKIW5K.FW04R71';
 
-        $s->runSudoRaw("(
+        $ssh->runSudoRaw("(
             deluser sudo_with_pass --remove-home;
             useradd sudo_with_pass --create-home --password '{$hash}' --shell '/bin/bash';
             mkdir -p /home/sudo_with_pass/.ssh;
@@ -83,17 +93,17 @@ class BasicTest extends TestCase
         ");
         // ignore if already exists
 
-        $this->assertContains($hash, $s->runSudoRaw('tail -1 /etc/shadow'));
-        $this->assertContains('uid=', $s->runSudoRaw('id sudo_with_pass'));
-        $this->assertContains('ssh-rsa', $s->runSudoRaw('cat /home/vagrant/.ssh/*'));
+        $this->assertContains($hash, $ssh->runSudoRaw('tail -1 /etc/shadow'));
+        $this->assertContains('uid=', $ssh->runSudoRaw('id sudo_with_pass'));
+        $this->assertContains('ssh-rsa', $ssh->runSudoRaw('cat /home/vagrant/.ssh/*'));
 
-        $s = $this->connectToVagrant(false, 'sudo_with_pass');
-        $s->sudoPassword = 'vagrant';
+        $ssh = $this->connectToVagrant(false, 'sudo_with_pass');
+        $ssh->sudoPassword = 'vagrant';
 
-        $this->assertNotContains('vagrant', $s->runSudoRaw('echo'));
+        $this->assertNotContains('vagrant', $ssh->runSudoRaw('echo'));
 
         $cmd = 'sleep 3';
-        $result = $s->runSudoRaw($cmd);
+        $result = $ssh->runSudoRaw($cmd);
 
         $this->assertEquals('sudo_with_pass is not in the sudoers file.  This incident will be reported.', $result);
 
@@ -102,17 +112,61 @@ class BasicTest extends TestCase
     /** @test */
     public function it_escapes_sudo()
     {
-        $c = $this->connectToVagrant(false);
+        $ssh = $this->connectToVagrant(false);
 
-        $this->assertEquals('d6=$6', $c->runSudoRaw("echo 'd6=$6'"));
+        $this->assertEquals('d6=$6', $ssh->runSudoRaw("echo 'd6=$6'"));
     }
 
     /** @test */
     public function it_escapes()
     {
-        $c = $this->connectToVagrant(false);
+        $ssh = $this->connectToVagrant(false);
 
-        $this->assertEquals('d6=$6', $c->runRaw("echo 'd6=$6'"));
+        $this->assertEquals('d6=$6', $ssh->runRaw("echo 'd6=$6'"));
+    }
+
+    /** @test */
+    public function cmd_result()
+    {
+        $ssh = $this->connectToVagrant();
+
+        $result0 = $ssh->runRaw('ls -1a ~');
+
+        $result = $ssh->run('bruh');
+
+        $this->assertEquals(127, $result->exitCode);
+        $this->assertEquals('bruh: command not found', $result->stderr);
+        $this->assertEquals('', $result->stdout);
+
+        $result = $ssh->run('echo 1');
+        $this->assertEquals(0, $result->exitCode);
+        $this->assertEquals('', $result->stderr);
+        $this->assertEquals('1', $result->stdout);
+
+        $result1 = $ssh->runRaw('ls -1a ~');
+        $this->assertEquals($result0, $result1, "Failed to clean up home");
+    }
+
+    /** @test */
+    public function sudo_cmd_result()
+    {
+        $ssh = $this->connectToVagrant();
+
+        $result0 = $ssh->runRaw('ls -1a ~');
+
+        $result = $ssh->sudoRun('bruh');
+
+        $this->assertEquals(127, $result->exitCode);
+        $this->assertEquals('bash: bruh: command not found', $result->stderr);
+        $this->assertEquals('', $result->stdout);
+
+        $result = $ssh->sudoRun('echo 1');
+        $this->assertEquals(0, $result->exitCode);
+        $this->assertEquals('', $result->stderr);
+        $this->assertEquals('1', $result->stdout);
+
+        $result1 = $ssh->runRaw('ls -1a ~');
+        $this->assertEquals($result0, $result1, "Failed to clean up home");
     }
 
 

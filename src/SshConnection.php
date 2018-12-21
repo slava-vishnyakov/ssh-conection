@@ -23,6 +23,7 @@ class SshConnection
 
     public $sudoPassword;
 
+    private $home;
     private $prompt;
 
     /**
@@ -69,28 +70,70 @@ class SshConnection
 
     }
 
+    public function run($cmd, $args = []): CommandResult
+    {
+        $cmd2 = escapeshellcmd($cmd) . " " . join(' ', array_map('escapeshellarg', $args));
+
+        $stderr = $this->getHome() . '/.stderr_' . md5(random_bytes(32));
+
+        $stdout = $this->runRaw("$cmd2 2>$stderr");
+        $exitCode = $this->runRaw("echo $?");
+
+        $stderr = $this->runRaw("cat $stderr; rm -f $stderr");
+
+        return new CommandResult($stdout, $stderr, $exitCode);
+    }
+
+    public function sudoRun($cmd, $args = []): CommandResult
+    {
+        $cmd2 = escapeshellcmd($cmd) . " " . join(' ', array_map('escapeshellarg', $args));
+
+        $stderr = $this->getHome() . '/.stderr_' . md5(random_bytes(32));
+
+        $stdout = $this->runSudoRaw("$cmd2 2>$stderr; echo \$?");
+
+        $exitCodeRegex = '#\r?\n?(\d+)$#';
+        preg_match($exitCodeRegex, $stdout, $m);
+        $exitCode = (int)$m[0];
+
+        $stdout = preg_replace($exitCodeRegex, '', $stdout);
+
+        $stderr = $this->runRaw("cat $stderr; rm -f $stderr");
+
+        return new CommandResult($stdout, $stderr, $exitCode);
+    }
+
     public function runSudoRaw($cmd)
     {
-        $sudoFile = './pw_' . md5(random_bytes(32)) . '.sh';
-        $this->sshWrite("cd ~; touch $sudoFile; chmod 0700 $sudoFile; cat > $sudoFile <<EOF\n");
-        $this->sshWrite("#!/bin/bash\necho {$this->sudoPassword}\n");
-        $this->sshWrite("EOF\n");
-        $this->readUntilPrompt();
+        $home = $this->getHome();
+        $rand = md5(random_bytes(32));
+        $sudoFile = "$home/.pw_{$rand}.sh";
+        $script = "#!/bin/bash\necho {$this->sudoPassword}";
+        $this->createFile($sudoFile, $script, '0700');
 
-        $cmd = escapeshellarg($cmd);
-        // above command should self-remove the file, but rm it just in case
-        $this->sshWrite("SUDO_ASKPASS=$sudoFile sudo --askpass bash -lc $cmd; (rm -f $sudoFile 2>/dev/null)\n");
+        $cmd = escapeshellarg("rm -f $sudoFile;" . $cmd);
+
+        $this->sshWrite("SUDO_ASKPASS=$sudoFile sudo --askpass bash -lc $cmd\n"); // (rm -f $sudoFile 2>/dev/null)
 
         $result = $this->readUntilPrompt();
 
         return $result;
     }
 
+    public function createFile($filename, $content, $permissions = '0755')
+    {
+        if(!is_string($permissions)) {
+            throw new \RuntimeException("Permissions must be a string");
+        }
+        $this->sshWrite("touch $filename; chmod $permissions $filename; cat > $filename <<EOF\n");
+        $this->sshWrite("$content\n");
+        $this->sshWrite("EOF\n");
+        $this->readUntilPrompt();
+    }
+
     public function runRaw($cmd)
     {
-        $cmd = escapeshellarg($cmd);
-        $this->sshWrite("bash -lc $cmd\n");
-
+        $this->sshWrite("$cmd\n");
         return $this->readUntilPrompt();
     }
 
@@ -151,6 +194,19 @@ class SshConnection
         }
 
         return $s;
+    }
+
+    /**
+     * @return string
+     */
+    private function getHome()
+    {
+        if(!$this->home) {
+            $this->home = $this->runRaw("(cd ~; pwd)");
+            $this->home = rtrim($this->home, '/');
+        }
+
+        return $this->home;
     }
 
 }

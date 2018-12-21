@@ -76,8 +76,13 @@ class SshConnection
 
         $stderr = $this->getHome() . '/.stderr_' . md5(random_bytes(32));
 
-        $stdout = $this->runRaw("$cmd2 2>$stderr");
-        $exitCode = $this->runRaw("echo $?");
+        $stdout = $this->runRaw("$cmd2 2>$stderr; echo $?");
+
+        $exitCodeRegex = '#\r?\n?(\d+)$#';
+        preg_match($exitCodeRegex, $stdout, $m);
+        $exitCode = (int)$m[0];
+
+        $stdout = preg_replace($exitCodeRegex, '', $stdout);
 
         $stderr = $this->runRaw("cat $stderr; rm -f $stderr");
 

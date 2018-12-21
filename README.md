@@ -22,7 +22,7 @@ print($result->stderr); // ""
 print($result->exitCode); // 0
 
 $ssh->sudoPassword = 'vagrant';
-print($ssh->sudoRun('whoami'));
+$result = $ssh->sudoRun('whoami');
 ```
 
 # Testing
